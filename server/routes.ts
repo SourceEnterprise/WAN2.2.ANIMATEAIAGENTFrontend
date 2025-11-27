@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import axios from "axios";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { storage } from "./storage";
+import { insertFinishedVideoSchema } from "@shared/schema";
 
 // Configure multer for memory storage
 const upload = multer({
@@ -105,6 +107,66 @@ export async function registerRoutes(
       
       return res.status(500).json({ 
         error: error.message || "Failed to upload files" 
+      });
+    }
+  });
+
+  // Endpoint for n8n workflow to submit finished videos
+  app.post("/api/finished-videos", async (req, res) => {
+    try {
+      const parsed = insertFinishedVideoSchema.safeParse(req.body);
+      
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          error: "Invalid request body. Required field: videoUrl" 
+        });
+      }
+
+      const finishedVideo = await storage.createFinishedVideo(parsed.data);
+      
+      return res.status(201).json({
+        success: true,
+        video: finishedVideo
+      });
+    } catch (error: any) {
+      console.error("Error creating finished video:", error);
+      return res.status(500).json({ 
+        error: error.message || "Failed to save finished video" 
+      });
+    }
+  });
+
+  // Get all finished videos
+  app.get("/api/finished-videos", async (req, res) => {
+    try {
+      const videos = await storage.getFinishedVideos();
+      return res.json(videos);
+    } catch (error: any) {
+      console.error("Error fetching finished videos:", error);
+      return res.status(500).json({ 
+        error: error.message || "Failed to fetch finished videos" 
+      });
+    }
+  });
+
+  // Get a specific finished video by ID
+  app.get("/api/finished-videos/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid video ID" });
+      }
+
+      const video = await storage.getFinishedVideo(id);
+      if (!video) {
+        return res.status(404).json({ error: "Video not found" });
+      }
+      
+      return res.json(video);
+    } catch (error: any) {
+      console.error("Error fetching finished video:", error);
+      return res.status(500).json({ 
+        error: error.message || "Failed to fetch finished video" 
       });
     }
   });

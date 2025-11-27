@@ -1,4 +1,17 @@
+import { pgTable, serial, text } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Database table for finished videos from n8n workflow
+export const finishedVideos = pgTable("finished_videos", {
+  id: serial("id").primaryKey(),
+  videoUrl: text("video_url").notNull(),
+});
+
+// Drizzle schemas and types
+export const insertFinishedVideoSchema = createInsertSchema(finishedVideos).omit({ id: true });
+export type InsertFinishedVideo = z.infer<typeof insertFinishedVideoSchema>;
+export type FinishedVideo = typeof finishedVideos.$inferSelect;
 
 // File upload validation schemas
 export const photoUploadSchema = z.object({
