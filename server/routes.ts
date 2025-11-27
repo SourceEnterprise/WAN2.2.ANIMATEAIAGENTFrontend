@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import axios from "axios";
-import FormData from "form-data";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 // Configure multer for memory storage
 const upload = multer({
@@ -17,7 +17,22 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Upload endpoint - accepts photo and video files and forwards to n8n webhook
+  // Endpoint to serve uploaded objects publicly
+  app.get("/objects/:objectPath(*)", async (req, res) => {
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error serving object:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Upload endpoint - accepts photo and video files, stores them, and sends URLs to n8n webhook
   app.post("/api/upload", upload.fields([
     { name: "photo", maxCount: 1 },
     { name: "video", maxCount: 1 }
@@ -40,37 +55,42 @@ export async function registerRoutes(
         });
       }
 
-      // Create form data to send to n8n webhook
-      const formData = new FormData();
-      
+      const objectStorageService = new ObjectStorageService();
+      const webhookData: { image_data?: string; video_data?: string } = {};
+
+      // Upload photo to object storage and get public URL
       if (files.photo && files.photo[0]) {
         const photo = files.photo[0];
-        formData.append("photo", photo.buffer, {
-          filename: photo.originalname,
-          contentType: photo.mimetype,
-        });
+        const { publicUrl } = await objectStorageService.uploadFileFromBuffer(
+          photo.buffer,
+          photo.originalname,
+          photo.mimetype
+        );
+        webhookData.image_data = publicUrl;
       }
       
+      // Upload video to object storage and get public URL
       if (files.video && files.video[0]) {
         const video = files.video[0];
-        formData.append("video", video.buffer, {
-          filename: video.originalname,
-          contentType: video.mimetype,
-        });
+        const { publicUrl } = await objectStorageService.uploadFileFromBuffer(
+          video.buffer,
+          video.originalname,
+          video.mimetype
+        );
+        webhookData.video_data = publicUrl;
       }
 
-      // Send files to n8n webhook
-      const response = await axios.post(webhookUrl, formData, {
+      // Send public URLs to n8n webhook as JSON
+      const response = await axios.post(webhookUrl, webhookData, {
         headers: {
-          ...formData.getHeaders(),
+          "Content-Type": "application/json",
         },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
       });
 
       return res.json({ 
         success: true, 
         message: "Files uploaded successfully",
+        uploadedFiles: webhookData,
         webhookResponse: response.data 
       });
 
@@ -78,7 +98,6 @@ export async function registerRoutes(
       console.error("Upload error:", error);
       
       if (error.response) {
-        // Error from n8n webhook
         return res.status(error.response.status).json({
           error: "Webhook error: " + (error.response.data?.message || error.message),
         });
