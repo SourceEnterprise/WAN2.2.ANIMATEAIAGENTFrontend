@@ -14,6 +14,14 @@ run = ["npm", "run", "start"]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 42733
+externalPort = 3001
+
+[[ports]]
+localPort = 46039
+externalPort = 3000
+
 [env]
 PORT = "5000"
 
@@ -37,3 +45,8 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+N8N_WEBHOOK_URL = "https://kevbadi.app.n8n.cloud/webhook-test/39791f2e-6cec-49b0-a0ee-94cba5708bd5"
