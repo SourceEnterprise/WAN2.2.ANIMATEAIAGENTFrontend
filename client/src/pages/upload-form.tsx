@@ -2,8 +2,9 @@ import { useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation } from "@tanstack/react-query";
-import { ImageIcon, VideoIcon, Upload, X, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ImageIcon, VideoIcon, Upload, X, CheckCircle2, AlertCircle, Loader2, Film, RefreshCw } from "lucide-react";
+import type { FinishedVideo } from "@shared/schema";
 
 export default function UploadForm() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -13,6 +14,11 @@ export default function UploadForm() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: finishedVideos, isLoading: videosLoading, refetch: refetchVideos } = useQuery<FinishedVideo[]>({
+    queryKey: ["/api/finished-videos"],
+  });
 
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) => {
@@ -34,7 +40,6 @@ export default function UploadForm() {
         description: "Files uploaded successfully to webhook",
         variant: "default",
       });
-      // Reset form
       setPhotoFile(null);
       setVideoFile(null);
       setPhotoPreview(null);
@@ -55,7 +60,6 @@ export default function UploadForm() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
     if (!validTypes.includes(file.type)) {
       toast({
@@ -66,7 +70,6 @@ export default function UploadForm() {
       return;
     }
 
-    // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast({
         title: "File Too Large",
@@ -88,7 +91,6 @@ export default function UploadForm() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     const validTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
     if (!validTypes.includes(file.type)) {
       toast({
@@ -99,7 +101,6 @@ export default function UploadForm() {
       return;
     }
 
-    // Validate file size (100MB)
     if (file.size > 100 * 1024 * 1024) {
       toast({
         title: "File Too Large",
@@ -154,179 +155,240 @@ export default function UploadForm() {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
+  const handleRefreshVideos = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/finished-videos"] });
+    refetchVideos();
+  };
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
-      <Card className="w-full max-w-2xl p-8">
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-semibold text-foreground">Upload Media Files</h1>
-            <p className="text-sm text-muted-foreground">
-              Upload photos and videos to your n8n webhook
-            </p>
-          </div>
+    <div className="min-h-screen w-full bg-background p-6">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <Card className="w-full max-w-2xl mx-auto p-8">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="text-center space-y-2">
+              <h1 className="text-3xl font-semibold text-foreground">Upload Media Files</h1>
+              <p className="text-sm text-muted-foreground">
+                Upload photos and videos to your n8n webhook
+              </p>
+            </div>
 
-          {/* Photo Upload */}
-          <div className="space-y-4">
-            <label className="block text-base font-medium text-foreground">
-              Photo
-            </label>
-            
-            {!photoPreview ? (
-              <div
-                onClick={() => photoInputRef.current?.click()}
-                className="min-h-48 border-2 border-dashed border-input rounded-lg flex flex-col items-center justify-center cursor-pointer hover-elevate active-elevate-2 transition-colors bg-muted/30"
-                data-testid="dropzone-photo"
-              >
-                <ImageIcon className="w-12 h-12 text-muted-foreground mb-3" />
-                <p className="text-base text-foreground font-medium">
-                  Click to upload or drag and drop
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  PNG, JPG, GIF up to 10MB
-                </p>
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/gif"
-                  onChange={handlePhotoSelect}
-                  className="hidden"
-                  data-testid="input-photo"
-                />
-              </div>
-            ) : (
-              <div className="border border-border rounded-lg p-4 bg-card">
-                <div className="flex items-start gap-4">
-                  <img
-                    src={photoPreview}
-                    alt="Photo preview"
-                    className="w-32 h-32 object-cover rounded"
-                    data-testid="preview-photo"
+            <div className="space-y-4">
+              <label className="block text-base font-medium text-foreground">
+                Photo
+              </label>
+              
+              {!photoPreview ? (
+                <div
+                  onClick={() => photoInputRef.current?.click()}
+                  className="min-h-48 border-2 border-dashed border-input rounded-lg flex flex-col items-center justify-center cursor-pointer hover-elevate active-elevate-2 transition-colors bg-muted/30"
+                  data-testid="dropzone-photo"
+                >
+                  <ImageIcon className="w-12 h-12 text-muted-foreground mb-3" />
+                  <p className="text-base text-foreground font-medium">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    PNG, JPG, GIF up to 10MB
+                  </p>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/gif"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                    data-testid="input-photo"
                   />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate" data-testid="text-photo-name">
-                      {photoFile?.name}
-                    </p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-photo-size">
-                      {photoFile && formatFileSize(photoFile.size)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={removePhoto}
-                    data-testid="button-remove-photo"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Video Upload */}
-          <div className="space-y-4">
-            <label className="block text-base font-medium text-foreground">
-              Video
-            </label>
-            
-            {!videoPreview ? (
-              <div
-                onClick={() => videoInputRef.current?.click()}
-                className="min-h-48 border-2 border-dashed border-input rounded-lg flex flex-col items-center justify-center cursor-pointer hover-elevate active-elevate-2 transition-colors bg-muted/30"
-                data-testid="dropzone-video"
-              >
-                <VideoIcon className="w-12 h-12 text-muted-foreground mb-3" />
-                <p className="text-base text-foreground font-medium">
-                  Click to upload or drag and drop
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  MP4, MOV, AVI up to 100MB
-                </p>
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/mp4,video/quicktime,video/x-msvideo"
-                  onChange={handleVideoSelect}
-                  className="hidden"
-                  data-testid="input-video"
-                />
-              </div>
-            ) : (
-              <div className="border border-border rounded-lg p-4 bg-card">
-                <div className="flex items-start gap-4">
-                  <video
-                    src={videoPreview}
-                    controls
-                    className="w-48 h-32 object-cover rounded"
-                    data-testid="preview-video"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate" data-testid="text-video-name">
-                      {videoFile?.name}
-                    </p>
-                    <p className="text-sm text-muted-foreground" data-testid="text-video-size">
-                      {videoFile && formatFileSize(videoFile.size)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={removeVideo}
-                    data-testid="button-remove-video"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Submit Button */}
-          <div className="pt-4">
-            <Button
-              type="submit"
-              className="w-full py-4 text-lg font-semibold"
-              disabled={(!photoFile && !videoFile) || uploadMutation.isPending}
-              data-testid="button-submit"
-            >
-              {uploadMutation.isPending ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Uploading...
-                </>
               ) : (
-                <>
-                  <Upload className="w-5 h-5 mr-2" />
-                  Upload Files
-                </>
+                <div className="border border-border rounded-lg p-4 bg-card">
+                  <div className="flex items-start gap-4">
+                    <img
+                      src={photoPreview}
+                      alt="Photo preview"
+                      className="w-32 h-32 object-cover rounded"
+                      data-testid="preview-photo"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate" data-testid="text-photo-name">
+                        {photoFile?.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-photo-size">
+                        {photoFile && formatFileSize(photoFile.size)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={removePhoto}
+                      data-testid="button-remove-photo"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
               )}
-            </Button>
-          </div>
+            </div>
 
-          {/* Success/Error Messages */}
-          {uploadMutation.isSuccess && (
-            <div className="flex items-center gap-2 p-4 bg-primary/10 border border-primary/20 rounded-lg" data-testid="status-success">
-              <CheckCircle2 className="w-5 h-5 text-primary" />
-              <p className="text-sm font-medium text-primary">
-                Files uploaded successfully!
-              </p>
+            <div className="space-y-4">
+              <label className="block text-base font-medium text-foreground">
+                Video
+              </label>
+              
+              {!videoPreview ? (
+                <div
+                  onClick={() => videoInputRef.current?.click()}
+                  className="min-h-48 border-2 border-dashed border-input rounded-lg flex flex-col items-center justify-center cursor-pointer hover-elevate active-elevate-2 transition-colors bg-muted/30"
+                  data-testid="dropzone-video"
+                >
+                  <VideoIcon className="w-12 h-12 text-muted-foreground mb-3" />
+                  <p className="text-base text-foreground font-medium">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    MP4, MOV, AVI up to 100MB
+                  </p>
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/x-msvideo"
+                    onChange={handleVideoSelect}
+                    className="hidden"
+                    data-testid="input-video"
+                  />
+                </div>
+              ) : (
+                <div className="border border-border rounded-lg p-4 bg-card">
+                  <div className="flex items-start gap-4">
+                    <video
+                      src={videoPreview}
+                      controls
+                      className="w-48 h-32 object-cover rounded"
+                      data-testid="preview-video"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate" data-testid="text-video-name">
+                        {videoFile?.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground" data-testid="text-video-size">
+                        {videoFile && formatFileSize(videoFile.size)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={removeVideo}
+                      data-testid="button-remove-video"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-          
-          {uploadMutation.isError && (
-            <div className="flex items-center gap-2 p-4 bg-destructive/10 border border-destructive/20 rounded-lg" data-testid="status-error">
-              <AlertCircle className="w-5 h-5 text-destructive" />
-              <p className="text-sm font-medium text-destructive">
-                {uploadMutation.error instanceof Error 
-                  ? uploadMutation.error.message 
-                  : "Upload failed. Please try again."}
-              </p>
+
+            <div className="pt-4">
+              <Button
+                type="submit"
+                className="w-full py-4 text-lg font-semibold"
+                disabled={(!photoFile && !videoFile) || uploadMutation.isPending}
+                data-testid="button-submit"
+              >
+                {uploadMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 mr-2" />
+                    Upload Files
+                  </>
+                )}
+              </Button>
             </div>
-          )}
-        </form>
-      </Card>
+
+            {uploadMutation.isSuccess && (
+              <div className="flex items-center gap-2 p-4 bg-primary/10 border border-primary/20 rounded-lg" data-testid="status-success">
+                <CheckCircle2 className="w-5 h-5 text-primary" />
+                <p className="text-sm font-medium text-primary">
+                  Files uploaded successfully!
+                </p>
+              </div>
+            )}
+            
+            {uploadMutation.isError && (
+              <div className="flex items-center gap-2 p-4 bg-destructive/10 border border-destructive/20 rounded-lg" data-testid="status-error">
+                <AlertCircle className="w-5 h-5 text-destructive" />
+                <p className="text-sm font-medium text-destructive">
+                  {uploadMutation.error instanceof Error 
+                    ? uploadMutation.error.message 
+                    : "Upload failed. Please try again."}
+                </p>
+              </div>
+            )}
+          </form>
+        </Card>
+
+        <Card className="w-full p-8">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <Film className="w-6 h-6 text-primary" />
+                <h2 className="text-2xl font-semibold text-foreground">Finished Videos</h2>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRefreshVideos}
+                data-testid="button-refresh-videos"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
+
+            {videosLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !finishedVideos || finishedVideos.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-input rounded-lg bg-muted/30">
+                <VideoIcon className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-base text-muted-foreground">
+                  No finished videos yet
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Videos processed by your workflow will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {finishedVideos.map((video) => (
+                  <Card key={video.id} className="overflow-hidden" data-testid={`card-video-${video.id}`}>
+                    <div className="aspect-video bg-black">
+                      <video
+                        src={video.videoUrl}
+                        controls
+                        className="w-full h-full object-contain"
+                        data-testid={`video-player-${video.id}`}
+                      />
+                    </div>
+                    <div className="p-4 space-y-2">
+                      <p className="text-sm font-medium text-foreground" data-testid={`text-video-id-${video.id}`}>
+                        Video #{video.id}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate" title={video.videoUrl} data-testid={`text-video-url-${video.id}`}>
+                        {video.videoUrl}
+                      </p>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
